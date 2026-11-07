@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from dbremedy.config import ConfigError, Settings, load_overrides
+from dbremedy.config import ConfigError, Settings, load_overrides, same_database
 from dbremedy.detectors import Finding
 from dbremedy.policy import FreezeWindow, Policy, load_policy
 from dbremedy.resources import resource
@@ -141,6 +141,16 @@ def test_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         Settings(observer_dsn="x", operator_dsn="y", store="mongo").check()
     with pytest.raises(ConfigError, match="needs DBR_STORE_DSN"):
         Settings(observer_dsn="x", operator_dsn="y", store="postgres").check()
+    target = "postgresql://dbr_observer:x@127.0.0.1:5432/shop"
+    with pytest.raises(ConfigError, match="points at the target database"):
+        Settings(
+            observer_dsn=target, operator_dsn="y", store="postgres", store_dsn="postgresql://ops@localhost/shop"
+        ).check()
+    Settings(
+        observer_dsn=target, operator_dsn="y", store="postgres", store_dsn="postgresql://ops@localhost/ops"
+    ).check()
+    assert same_database("host=db port=6432 dbname=a", "postgresql://u@db:6432/a")
+    assert not same_database("not a dsn ===", target)
     monkeypatch.setenv("DBR_TARGET_OBSERVER_DSN", "a")
     monkeypatch.setenv("DBR_CHANGE_FREEZE", "yes")
     monkeypatch.setenv("DBR_RUNBOOK_OVERRIDES", str(tmp_path / "o.yaml"))

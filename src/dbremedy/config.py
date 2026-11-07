@@ -9,7 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import yaml
+from psycopg.conninfo import conninfo_to_dict
 
 from dbremedy.engine import Engine
 from dbremedy.graph import Services
@@ -79,6 +81,27 @@ class Settings:
             raise ConfigError("DBR_STORE must be memory, sqlite or postgres")
         if self.store == "postgres" and not self.store_dsn:
             raise ConfigError("DBR_STORE=postgres needs DBR_STORE_DSN")
+        if self.store == "postgres" and same_database(self.store_dsn, self.observer_dsn):
+            raise ConfigError(
+                "DBR_STORE_DSN points at the target database. Keep the agent's store elsewhere: its "
+                "first start runs CREATE INDEX CONCURRENTLY, which waits for every open transaction, "
+                "including the incident's."
+            )
+
+
+def same_database(a: str, b: str) -> bool:
+    """Whether two DSNs name the same database on the same server (by host, port and name)."""
+    try:
+        left, right = conninfo_to_dict(a), conninfo_to_dict(b)
+    except psycopg.ProgrammingError:
+        return False
+
+    def where(info: dict[str, Any]) -> tuple[str, str, str]:
+        host = str(info.get("host") or "localhost")
+        host = "localhost" if host in ("127.0.0.1", "::1") or host.startswith("/") else host
+        return host, str(info.get("port") or "5432"), str(info.get("dbname") or info.get("user") or "")
+
+    return where(left) == where(right)
 
 
 def load_overrides(path: Path | None) -> dict[str, dict[str, float]]:

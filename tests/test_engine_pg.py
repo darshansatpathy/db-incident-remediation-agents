@@ -8,6 +8,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg.conninfo import make_conninfo
 
 from dbremedy import chaos, evaluation
 from dbremedy.actions import execute
@@ -88,8 +89,16 @@ def test_recover_runs_incidents_that_never_started(target: Target) -> None:
     wiring.close()
 
 
+def ops_database(target: Target) -> str:
+    """A separate database for the agent's own store, as a deployment would have."""
+    with psycopg.connect(target.admin, autocommit=True) as conn:
+        if not conn.execute("SELECT 1 FROM pg_database WHERE datname = 'dbr_ops'").fetchone():
+            conn.execute("CREATE DATABASE dbr_ops")
+    return make_conninfo(target.admin, dbname="dbr_ops")
+
+
 def test_postgres_store_and_checkpoints(target: Target) -> None:
-    settings = replace(target.settings(), store="postgres", store_dsn=target.admin)
+    settings = replace(target.settings(), store="postgres", store_dsn=ops_database(target))
     lab = chaos.Lab(target.admin, target.app)
     try:
         chaos.INJECTORS["runaway_etl"](lab)
