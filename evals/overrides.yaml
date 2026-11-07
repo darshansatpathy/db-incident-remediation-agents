@@ -1,0 +1,6 @@
+# Second-scale thresholds so the scenarios run in seconds. Same runbooks, same steps.
+lock-contention: {min_wait_s: 1, idle_blocker_s: 2, active_blocker_s: 2, verify_stable_s: 3}
+runaway-query: {max_query_s: 2}
+idle-in-transaction: {max_idle_s: 2}
+connection-saturation: {max_ratio: 0.5, min_idle_s: 1, min_application_share: 0.3}
+table-bloat: {min_dead_ratio: 0.2, min_dead_tuples: 5000}
