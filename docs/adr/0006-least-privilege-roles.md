@@ -15,7 +15,8 @@ do anything; an agent that can only read is no use in an incident.
   Every diagnostic, and the exporter, uses it.
 - `dbr_operator`: `pg_signal_backend`, `pg_read_all_stats`, `statement_timeout = 120s`,
   `lock_timeout = 5s`, and `pg_maintain` on PostgreSQL 17+ (the owner role of the demo schema on
-  older versions).
+  older versions), plus `USAGE` on each schema whose tables it may vacuum: `pg_maintain` grants
+  the right to vacuum, not the right to look the table up by name.
 
 `pg_signal_backend` cannot signal superuser backends, so "never touch superusers" is enforced by
 the governor and again by PostgreSQL.

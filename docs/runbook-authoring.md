@@ -55,4 +55,5 @@ step for that action matches, preferring an `auto` one.
 - Add a scenario where the agent must not act (protected, approval denied, or conditions not
   met) and check the outcome is an escalation.
 - Add the alert to `deploy/prometheus/alerts.yml` and a `promtool` test for it.
-- Run `dbremedy eval --planner rule,rogue --check`.
+- For `vacuum_analyze` on a new schema, grant the operator `USAGE` on it.
+- Run `dbremedy eval --planner rule,rogue --check` on every PostgreSQL version you support.

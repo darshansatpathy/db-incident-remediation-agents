@@ -119,7 +119,7 @@ Full table: [docs/evaluation-report.md](docs/evaluation-report.md).
 
 ## What the tests found
 
-Two of the design rules came from scenarios failing against a real database:
+Three of the design rules came from scenarios failing against a real database:
 
 - **Diagnostics were blocked by the incident.** The first version measured table sizes with
   `pg_total_relation_size()`, which takes a lock on the table. During an exclusive-lock
@@ -132,6 +132,12 @@ Two of the design rules came from scenarios failing against a real database:
   keep locks is an application that catches the error and rolls back to a savepoint, which is
   now its own scenario: cancel, then end the session once it sits idle with the outer
   transaction open.
+- **PostgreSQL 17 needed one more grant.** On 17 the operator gets `pg_maintain` instead of
+  table ownership, and `VACUUM shop.events` failed with "permission denied for schema":
+  `pg_maintain` grants the right to vacuum, but finding a table by name needs `USAGE` on its
+  schema. The CI job for PostgreSQL 17 caught it on the first push. `setup` now grants it, and an
+  attempt in which every action fails escalates straight away with the error instead of waiting
+  out the verification timeout.
 
 ## Runbooks
 
@@ -155,7 +161,7 @@ There is no DDL, no configuration change and no `VACUUM FULL`. How to write a ru
 
 | Layer | What it enforces | Where |
 |---|---|---|
-| Database roles | Observer: `pg_monitor`, read-only, 5s statement timeout, 1s lock timeout. Operator: `pg_signal_backend` (cannot signal superusers), `pg_read_all_stats`, `pg_maintain` on 17+ | [bootstrap.py](src/dbremedy/bootstrap.py) |
+| Database roles | Observer: `pg_monitor`, read-only, 5s statement timeout, 1s lock timeout. Operator: `pg_signal_backend` (cannot signal superusers), `pg_read_all_stats`, `pg_maintain` on 17+, `USAGE` on the schemas it may vacuum | [bootstrap.py](src/dbremedy/bootstrap.py) |
 | Runbook | Allowed actions and the conditions for each; approval per step; caps and attempts | [runbooks/](runbooks) |
 | Policy | Protected applications and users; never superusers or background workers; hard caps; batch approval; change-freeze windows; dry-run | [policies/policy.yaml](policies/policy.yaml) |
 | Governor | Re-checks every proposal against all of the above on fresh findings; stricter than the runbook, never looser | [governor.py](src/dbremedy/governor.py) |
@@ -213,7 +219,7 @@ this incident's findings; the governor checks its answer like any other.
 
 ## Engineering
 
-- 79 tests, 95% line coverage (gate: 90%), on a real PostgreSQL: detectors, governor, both
+- 80 tests, 95% line coverage (gate: 90%), on a real PostgreSQL: detectors, governor, both
   stores and checkpointers, a paused incident surviving a restart, the API and the CLI.
 - The evaluation gate runs both planners on PostgreSQL 16 and 17 on every push and uploads
   every scenario's incident report.

@@ -28,6 +28,7 @@ stateDiagram-v2
     approve --> execute: approved
     approve --> escalate: denied
     execute --> verify
+    execute --> escalate: every action failed
     verify --> report: quiet for the stability window
     verify --> next_attempt: changed, or timed out with attempts left
     next_attempt --> diagnose
@@ -41,7 +42,7 @@ stateDiagram-v2
 | diagnose | Takes a snapshot as the observer and runs the runbook's detector with its parameters | timeline event with the findings |
 | plan | Asks the planner for proposals; the governor reviews them with the ledger as history | refused proposals in the ledger; plan event |
 | approve | `interrupt()` with the exact actions; resumes with the decision | approval event; rejected actions in the ledger |
-| execute | Runs each allowed action once (the ledger id is derived from incident, finding and action) | ledger row with the result |
+| execute | Runs each allowed action once (the ledger id is derived from incident, finding and action); if every action failed, nothing changed, so it escalates with the errors | ledger row with the result |
 | verify | Polls the detector until it stays quiet for `stable_s`, or another step becomes applicable, or the timeout | verify event |
 | escalate | Records why and to whom | escalation event |
 | report | Closes the incident, computes time to close, writes the Markdown report | incident status, outcome, report |

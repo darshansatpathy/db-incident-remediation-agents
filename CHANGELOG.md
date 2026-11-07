@@ -4,6 +4,17 @@ All notable changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-07
+
+### Fixed
+
+- PostgreSQL 17: `setup` grants the operator `USAGE` on the demo schema. With `pg_maintain`
+  instead of ownership, `VACUUM` could not resolve the table and the table-bloat runbook failed.
+- An attempt in which every action fails now escalates at once with the errors, instead of
+  waiting for the verification timeout.
+- The runaway-query injector waits until PostgreSQL reports the statement as active, which made
+  one test timing-dependent on slow runners.
+
 ## [0.1.0] - 2026-11-07
 
 ### Added
