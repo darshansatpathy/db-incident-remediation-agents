@@ -1,0 +1,43 @@
+id: lock-contention
+version: 1.0.0
+title: Sessions blocked on locks
+severity: critical
+alerts: [PostgresBlockedSessions]
+detector:
+  name: blocking_locks
+  params: {min_wait_s: "${min_wait_s}"}
+parameters:
+  min_wait_s: 30          # how long the waiters must have been stuck
+  idle_blocker_s: 60      # an idle transaction holding locks this long is abandoned
+  active_blocker_s: 120   # a statement holding locks this long gets cancelled
+  verify_stable_s: 10     # applications retry; the chain must stay gone this long
+steps:
+  - name: end abandoned transactions that hold the locks
+    action: terminate_backend
+    when:
+      state_in: [idle in transaction, idle in transaction (aborted)]
+      min_state_age_s: "${idle_blocker_s}"
+  - name: cancel the statement holding the locks
+    action: cancel_backend
+    when:
+      state_in: [active]
+      min_query_age_s: "${active_blocker_s}"
+  - name: terminate a blocker that ignored the cancel
+    action: terminate_backend
+    when:
+      state_in: [active]
+      after: cancel_backend
+    approval: required
+verify: {settle_s: 1, interval_s: 2, timeout_s: 30, stable_s: "${verify_stable_s}"}
+limits: {max_actions: 6, max_attempts: 3}
+escalation: {team: dba-oncall, channel: "#db-incidents"}
+guidance: |
+  Find the root of the lock chain, not the sessions waiting behind it. An abandoned
+  transaction (idle in transaction) is safe to end; its work was never committed. A running
+  statement is cancelled first: that aborts its transaction, which releases the locks. If the
+  application catches the error and rolls back to a savepoint instead, the outer transaction
+  keeps the locks it took earlier and goes idle; the first step then ends it once it has been
+  idle long enough.
+recommendations:
+  - Set idle_in_transaction_session_timeout for the application roles involved.
+  - Set lock_timeout in the application so waiters fail fast instead of piling up.

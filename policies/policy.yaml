@@ -1,0 +1,17 @@
+# Operating policy, enforced by the governor on every proposed action, whatever the planner.
+protected:
+  # Sessions from these applications or users are never cancelled or terminated.
+  applications: ["billing-*", "pg_dump*", "pgbackrest*", "walreceiver", "*replication*"]
+  users: ["postgres", "replicator"]
+never_touch:
+  superusers: true            # pg_signal_backend can't signal them anyway; refuse before trying
+  background_workers: true    # autovacuum, walsender, logical replication workers
+limits:
+  max_terminations_per_incident: 60
+  max_cancellations_per_incident: 20
+  max_vacuums_per_incident: 3
+  batch_approval_threshold: 10   # one plan ending more sessions than this needs a person
+change_freeze:
+  active: false                  # during a freeze every action needs approval
+  windows: []                    # e.g. {days: [fri, sat, sun], start: "18:00", end: "23:59", timezone: UTC}
+dry_run: false

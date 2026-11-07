@@ -1,0 +1,36 @@
+id: runaway-query
+version: 1.0.0
+title: Statement running far longer than expected
+severity: warning
+alerts: [PostgresLongRunningQuery]
+detector:
+  name: long_running_queries
+  params: {min_query_age_s: "${max_query_s}"}
+parameters:
+  max_query_s: 300
+steps:
+  - name: cancel reporting and ad hoc queries
+    action: cancel_backend
+    when:
+      application_matches: ["reporting*", "adhoc*", "metabase*", "psql"]
+  - name: cancel other application queries
+    action: cancel_backend
+    when:
+      application_not_matches: ["reporting*", "adhoc*", "metabase*", "psql"]
+    approval: required
+  - name: terminate a session that ignored the cancel
+    action: terminate_backend
+    when:
+      state_in: [active]
+      after: cancel_backend
+    approval: required
+verify: {settle_s: 1, interval_s: 2, timeout_s: 20}
+limits: {max_actions: 10, max_attempts: 2}
+escalation: {team: dba-oncall, channel: "#db-incidents"}
+guidance: |
+  Cancelling rolls back one statement and leaves the session connected. Reporting and ad hoc
+  sessions are cancelled automatically; anything else needs a person, because the
+  application may not retry.
+recommendations:
+  - Set statement_timeout for reporting roles.
+  - Move heavy reporting to a replica.

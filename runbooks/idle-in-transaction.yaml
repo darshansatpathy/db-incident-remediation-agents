@@ -1,0 +1,25 @@
+id: idle-in-transaction
+version: 1.0.0
+title: Transactions left open and idle
+severity: warning
+alerts: [PostgresIdleInTransaction]
+detector:
+  name: idle_in_transaction
+  params: {min_state_age_s: "${max_idle_s}"}
+parameters:
+  max_idle_s: 600
+steps:
+  - name: end transactions abandoned by their client
+    action: terminate_backend
+    when:
+      state_in: [idle in transaction, idle in transaction (aborted)]
+verify: {settle_s: 1, interval_s: 2, timeout_s: 20}
+limits: {max_actions: 5, max_attempts: 2}
+escalation: {team: dba-oncall, channel: "#db-incidents"}
+guidance: |
+  An open transaction holds back vacuum and keeps its locks. If the client has not sent
+  anything for this long it has usually crashed, leaked a connection, or is waiting on
+  something outside the database.
+recommendations:
+  - Set idle_in_transaction_session_timeout for the application roles involved.
+  - Check the application for code paths that open a transaction and then call out to other services.

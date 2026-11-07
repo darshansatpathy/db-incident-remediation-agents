@@ -1,0 +1,34 @@
+id: table-bloat
+version: 1.0.0
+title: Dead tuples piling up in a table
+severity: warning
+alerts: [PostgresTableBloat]
+detector:
+  name: table_bloat
+  params:
+    min_dead_ratio: "${min_dead_ratio}"
+    min_dead_tuples: "${min_dead_tuples}"
+parameters:
+  min_dead_ratio: 0.2
+  min_dead_tuples: 10000
+  auto_vacuum_max_mb: 2048
+steps:
+  - name: vacuum and analyze a small table
+    action: vacuum_analyze
+    when:
+      max_size_mb: "${auto_vacuum_max_mb}"
+  - name: vacuum and analyze a large table
+    action: vacuum_analyze
+    when:
+      min_dead_ratio: "${min_dead_ratio}"
+    approval: required
+verify: {settle_s: 1, interval_s: 2, timeout_s: 60}
+limits: {max_actions: 3, max_attempts: 1}
+escalation: {team: dba-oncall, channel: "#db-incidents"}
+guidance: |
+  A plain VACUUM (not VACUUM FULL) takes no exclusive lock and can run alongside traffic.
+  If autovacuum is not keeping up, find out why: long transactions, autovacuum disabled on
+  the table, or thresholds too high for its size.
+recommendations:
+  - Check for long-running or idle transactions holding back the xmin horizon.
+  - Lower autovacuum_vacuum_scale_factor for this table.

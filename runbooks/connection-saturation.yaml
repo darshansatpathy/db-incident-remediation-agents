@@ -1,0 +1,30 @@
+id: connection-saturation
+version: 1.0.0
+title: Connections close to max_connections
+severity: critical
+alerts: [PostgresConnectionSaturation]
+detector:
+  name: connection_saturation
+  params:
+    max_ratio: "${max_ratio}"
+    min_idle_s: "${min_idle_s}"
+    min_application_share: "${min_application_share}"
+parameters:
+  max_ratio: 0.8
+  min_idle_s: 300
+  min_application_share: 0.3
+steps:
+  - name: close idle connections of the application holding most of them
+    action: terminate_backend
+    when:
+      state_in: [idle]
+verify: {settle_s: 1, interval_s: 2, timeout_s: 20}
+limits: {max_actions: 80, max_attempts: 2}
+escalation: {team: dba-oncall, channel: "#db-incidents"}
+guidance: |
+  Only idle connections are closed, and only for applications holding a large share of all
+  connections; that is almost always a pool that is too large or a connection leak. The
+  policy asks for approval when many sessions would be closed at once.
+recommendations:
+  - Put a pooler (PgBouncer) in front of the application or reduce its pool size.
+  - Set idle_session_timeout for the application role.
