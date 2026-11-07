@@ -96,6 +96,10 @@ result is `stale`. `VACUUM (ANALYZE)` runs with identifiers quoted by psycopg an
 | sqlite | SQLite file (WAL) | `SqliteSaver` |
 | postgres | PostgreSQL tables `dbr_*` | `PostgresSaver` |
 
+The PostgreSQL store must be a different database from the target. `PostgresSaver`'s migrations
+use `CREATE INDEX CONCURRENTLY`, which waits for all open transactions; in the target database the
+agent's first start would wait behind the incident. Configuration refuses that combination.
+
 An incident's `open_key` column is unique while it is open, so concurrent deliveries of the same
 alert attach to one incident. It is cleared on close, so the next occurrence opens a new one.
 

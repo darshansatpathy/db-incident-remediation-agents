@@ -119,7 +119,7 @@ Full table: [docs/evaluation-report.md](docs/evaluation-report.md).
 
 ## What the tests found
 
-Three of the design rules came from scenarios failing against a real database:
+Four of the design rules came from scenarios failing against a real database:
 
 - **Diagnostics were blocked by the incident.** The first version measured table sizes with
   `pg_total_relation_size()`, which takes a lock on the table. During an exclusive-lock
@@ -138,6 +138,11 @@ Three of the design rules came from scenarios failing against a real database:
   schema. The CI job for PostgreSQL 17 caught it on the first push. `setup` now grants it, and an
   attempt in which every action fails escalates straight away with the error instead of waiting
   out the verification timeout.
+- **The agent's store must not live in the database it protects.** On a fresh database, the
+  checkpointer's migrations run `CREATE INDEX CONCURRENTLY`, which waits for every open
+  transaction. In CI that meant the agent's first start waited two minutes behind the very query
+  it had been called about. The agent now refuses to start with `DBR_STORE_DSN` pointing at the
+  target database.
 
 ## Runbooks
 
@@ -207,7 +212,7 @@ that were mid-run resume from their last checkpoint; paused ones keep waiting.
 | Variable | Purpose |
 |---|---|
 | `DBR_TARGET_OBSERVER_DSN`, `DBR_TARGET_OPERATOR_DSN` | The two roles created by `dbremedy setup` |
-| `DBR_STORE` | `memory`, `sqlite` (`DBR_SQLITE_PATH`) or `postgres` (`DBR_STORE_DSN`) for incidents, ledger and checkpoints |
+| `DBR_STORE` | `memory`, `sqlite` (`DBR_SQLITE_PATH`) or `postgres` (`DBR_STORE_DSN`, a database other than the target) for incidents, ledger and checkpoints |
 | `DBR_PLANNER` | `rule`, or `llm` with `DBR_LLM_BASE_URL`, `DBR_LLM_MODEL`, `DBR_LLM_API_KEY` |
 | `DBR_WEBHOOK_TOKEN`, `DBR_SERVICE_TOKEN` | Webhook and gateway authentication |
 | `DBR_CHANGE_FREEZE`, `DBR_DRY_RUN` | Every action needs approval; record and do nothing |

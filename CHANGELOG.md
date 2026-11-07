@@ -4,6 +4,15 @@ All notable changes are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-11-07
+
+### Fixed
+
+- The agent refuses to start when `DBR_STORE_DSN` points at the target database. The
+  checkpointer's first-start migrations run `CREATE INDEX CONCURRENTLY`, which waits for every
+  open transaction, including the one the agent was called about. The PostgreSQL store test now
+  uses a separate database, as a deployment would.
+
 ## [0.1.1] - 2026-11-07
 
 ### Fixed
