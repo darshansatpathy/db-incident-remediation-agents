@@ -1,0 +1,16 @@
+route:
+  receiver: dbremedy
+  group_by: [alertname, instance, datname]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 30m
+receivers:
+  - name: dbremedy
+    webhook_configs:
+      - url: http://dbremedy:8080/v1/alerts/alertmanager
+        send_resolved: true
+        max_alerts: 50
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/webhook-token

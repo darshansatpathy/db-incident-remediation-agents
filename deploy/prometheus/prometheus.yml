@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+rule_files: [alerts.yml]
+alerting:
+  alertmanagers:
+    - static_configs: [{targets: ["alertmanager:9093"]}]
+scrape_configs:
+  - job_name: postgres
+    static_configs: [{targets: ["postgres-exporter:9187"], labels: {instance: shop-primary}}]
+  - job_name: dbremedy
+    static_configs: [{targets: ["dbremedy:8080"]}]

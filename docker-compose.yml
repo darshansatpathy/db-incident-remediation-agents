@@ -1,0 +1,81 @@
+# The full pipeline on one machine: PostgreSQL, postgres_exporter, Prometheus, Alertmanager and
+# the agent. `docker compose up`, then inject an incident:
+#   docker compose run --rm dbremedy dbremedy chaos inject idle_blocker --hold 600
+# and watch it at http://localhost:8080/v1/incidents (header X-User-Roles: viewer).
+name: dbremedy
+
+x-dsn: &dsn
+  DBR_ADMIN_DSN: postgresql://postgres:${POSTGRES_PASSWORD:-local-only}@postgres:5432/shop
+  DBR_APP_DSN: postgresql://dbr_app:${DBR_APP_PASSWORD:-dbr-app-local}@postgres:5432/shop
+  DBR_TARGET_OBSERVER_DSN: postgresql://dbr_observer:${DBR_OBSERVER_PASSWORD:-dbr-observer-local}@postgres:5432/shop
+  DBR_TARGET_OPERATOR_DSN: postgresql://dbr_operator:${DBR_OPERATOR_PASSWORD:-dbr-operator-local}@postgres:5432/shop
+  DBR_OBSERVER_PASSWORD: ${DBR_OBSERVER_PASSWORD:-dbr-observer-local}
+  DBR_OPERATOR_PASSWORD: ${DBR_OPERATOR_PASSWORD:-dbr-operator-local}
+  DBR_APP_PASSWORD: ${DBR_APP_PASSWORD:-dbr-app-local}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-only}
+      POSTGRES_DB: shop
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "shop"]
+      interval: 2s
+      retries: 30
+
+  setup:
+    build: .
+    command: ["dbremedy", "setup"]
+    environment: *dsn
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.17.1
+    command: ["--extend.query-path=/etc/exporter/queries.yaml"]
+    environment:
+      DATA_SOURCE_NAME: postgresql://dbr_observer:${DBR_OBSERVER_PASSWORD:-dbr-observer-local}@postgres:5432/shop?sslmode=disable
+    volumes:
+      - ./deploy/prometheus/queries.yaml:/etc/exporter/queries.yaml:ro
+    depends_on:
+      setup: {condition: service_completed_successfully}
+
+  dbremedy:
+    build: .
+    environment:
+      <<: *dsn
+      DBR_WEBHOOK_TOKEN: ${DBR_WEBHOOK_TOKEN:-change-me}
+      DBR_RUNBOOK_OVERRIDES: ${DBR_RUNBOOK_OVERRIDES:-}
+    volumes:
+      - dbremedy-data:/data
+    ports: ["8080:8080"]
+    depends_on:
+      setup: {condition: service_completed_successfully}
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    configs:
+      - source: alertmanager
+        target: /etc/alertmanager/alertmanager.yml
+      - source: webhook-token
+        target: /etc/alertmanager/webhook-token
+    ports: ["9093:9093"]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["9090:9090"]
+    depends_on: [postgres-exporter, alertmanager]
+
+configs:
+  alertmanager:
+    file: ./deploy/alertmanager/alertmanager.yml
+  webhook-token:
+    content: ${DBR_WEBHOOK_TOKEN:-change-me}
+
+volumes:
+  dbremedy-data:

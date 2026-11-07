@@ -1,0 +1,41 @@
+# One alert per runbook. The alert names must match a runbook's `alerts:` list.
+groups:
+  - name: postgres-incidents
+    rules:
+      - alert: PostgresBlockedSessions
+        expr: dbr_sessions_blocked > 0 and dbr_sessions_longest_lock_wait_seconds > 30
+        for: 1m
+        labels: {severity: critical, team: dba}
+        annotations:
+          summary: "{{ $value }} session(s) blocked on locks on {{ $labels.instance }}"
+          runbook: lock-contention
+      - alert: PostgresLongRunningQuery
+        expr: dbr_sessions_longest_query_seconds > 300
+        for: 1m
+        labels: {severity: warning, team: dba}
+        annotations:
+          summary: "A statement has run for {{ $value | humanizeDuration }} on {{ $labels.instance }}"
+          runbook: runaway-query
+      - alert: PostgresIdleInTransaction
+        expr: dbr_sessions_longest_idle_in_transaction_seconds > 600
+        for: 1m
+        labels: {severity: warning, team: dba}
+        annotations:
+          summary: "A transaction has been idle for {{ $value | humanizeDuration }} on {{ $labels.instance }}"
+          runbook: idle-in-transaction
+      - alert: PostgresConnectionSaturation
+        expr: dbr_sessions_client_connections / dbr_sessions_usable_connections > 0.8
+        for: 2m
+        labels: {severity: critical, team: dba}
+        annotations:
+          summary: "Connections at {{ $value | humanizePercentage }} of the limit on {{ $labels.instance }}"
+          runbook: connection-saturation
+      - alert: PostgresTableBloat
+        expr: >
+          dbr_table_dead_tuples > 10000
+          and dbr_table_dead_tuples / (dbr_table_dead_tuples + dbr_table_live_tuples) > 0.2
+        for: 10m
+        labels: {severity: warning, team: dba}
+        annotations:
+          summary: "{{ $labels.schemaname }}.{{ $labels.relname }} has {{ $value }} dead tuples"
+          runbook: table-bloat

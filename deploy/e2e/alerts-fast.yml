@@ -1,0 +1,10 @@
+# deploy/prometheus/alerts.yml's lock alert with the evaluation's thresholds.
+groups:
+  - name: postgres-incidents-fast
+    rules:
+      - alert: PostgresBlockedSessions
+        expr: dbr_sessions_blocked > 0 and dbr_sessions_longest_lock_wait_seconds > 1
+        for: 2s
+        labels: {severity: critical, team: dba}
+        annotations:
+          summary: "{{ $value }} session(s) blocked on locks on {{ $labels.instance }}"
