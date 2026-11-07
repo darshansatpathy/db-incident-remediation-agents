@@ -92,7 +92,7 @@ jobs:
         run: >-
           dbremedy eval --planner rule,rogue --check --report eval-report.md --json eval-results.json
           --reports-dir eval-incident-reports
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: eval-postgres-${{ matrix.postgres }}
@@ -141,7 +141,7 @@ jobs:
             deploy/alertmanager/alertmanager.yml > /tmp/am.yml && amtool check-config /tmp/am.yml
       - name: A real lock incident goes through the whole pipeline and is fixed
         run: mkdir -p e2e-logs && E2E_LOGS=e2e-logs ./scripts/e2e.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-logs
