@@ -105,6 +105,12 @@ class Lab:
             time.sleep(0.1)
         return condition()
 
+    def is_active(self, pid: int) -> bool:
+        """True once PostgreSQL reports the session as running a statement."""
+        with psycopg.connect(self.admin_dsn, autocommit=True) as conn:
+            row = conn.execute("SELECT state = 'active' FROM pg_stat_activity WHERE pid = %s", (pid,)).fetchone()
+        return bool(row and row[0])
+
     def waiting_on_locks(self) -> int:
         pids = [t.pid for t in self.tracked]
         if not pids:
@@ -292,7 +298,8 @@ def runaway(application: str, seconds: float) -> Callable[[Lab], None]:
             lab.idle()
 
         lab.background(run, "runaway")
-        time.sleep(0.2)
+        pid = conn.info.backend_pid
+        lab.wait_for(lambda: lab.is_active(pid), timeout=10)
 
     return inject
 

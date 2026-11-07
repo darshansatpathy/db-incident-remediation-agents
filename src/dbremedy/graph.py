@@ -1,8 +1,9 @@
 """The incident workflow as a LangGraph state graph.
 
     diagnose ─▶ plan ─┬─▶ approve ─┬─▶ execute ─▶ verify ─┬─▶ report   (resolved)
-       ▲              │            └─▶ escalate           ├─▶ diagnose (next attempt)
-       │              ├─▶ execute                         └─▶ escalate
+       ▲              │            └─▶ escalate   │       ├─▶ diagnose (next attempt)
+       │              ├─▶ execute                 │       └─▶ escalate
+       │              │            every action failed ─▶ escalate
        │              └─▶ escalate ─▶ report
        └─ no findings at the start ─▶ report (cleared)
 
@@ -44,6 +45,7 @@ class IncidentState(TypedDict, total=False):
     allowed: list[dict[str, Any]]
     pending: list[dict[str, Any]]
     verified: bool
+    actions_failed: bool
     outcome: str
     reason: str
 
@@ -249,10 +251,13 @@ def build_graph(svc: Services, checkpointer: Any) -> Any:
 
     def execute(state: IncidentState) -> dict[str, Any]:
         incident_id = state["incident_id"]
+        results: list[tuple[str, str]] = []
         for item in state.get("allowed", []):
             action_id = _action_id(incident_id, "exec", item["finding_id"], item["action"])
-            if svc.store.action_recorded(action_id) is not None:
-                continue  # already done before a re-run of this node
+            recorded = svc.store.action_recorded(action_id)
+            if recorded is not None:  # already done before a re-run of this node
+                results.append((recorded["status"], recorded["detail"]))
+                continue
             finding = finding_from(item["finding"])
             result = catalog.execute(item["action"], finding, svc.operator_dsn, dry_run=svc.policy.dry_run)
             svc.store.record_action(
@@ -278,7 +283,15 @@ def build_graph(svc: Services, checkpointer: Any) -> Any:
                 {"finding_id": item["finding_id"], "action": item["action"], **result.to_dict()},
             )
             svc.on_event("action", {"action": item["action"], "status": result.status})
-        return {"allowed": []}
+            results.append((result.status, result.detail))
+        if results and all(status == "failed" for status, _ in results):
+            # Nothing changed, so there is nothing to verify: say why and hand over.
+            details = "; ".join(sorted({detail for _, detail in results}))
+            return {"allowed": [], "actions_failed": True, "reason": f"every action failed: {details}"}
+        return {"allowed": [], "actions_failed": False}
+
+    def after_execute(state: IncidentState) -> str:
+        return "escalate" if state.get("actions_failed") else "verify"
 
     def verify(state: IncidentState) -> dict[str, Any]:
         incident_id, book = state["incident_id"], runbook_of(state)
@@ -373,7 +386,7 @@ def build_graph(svc: Services, checkpointer: Any) -> Any:
     graph.add_conditional_edges("diagnose", after_diagnose, ["plan", "report"])
     graph.add_conditional_edges("plan", after_plan, ["approve", "execute", "escalate"])
     graph.add_conditional_edges("approve", after_approve, ["execute", "escalate"])
-    graph.add_edge("execute", "verify")
+    graph.add_conditional_edges("execute", after_execute, ["verify", "escalate"])
     graph.add_conditional_edges("verify", after_verify, ["report", "next_attempt", "escalate"])
     graph.add_edge("next_attempt", "diagnose")
     graph.add_edge("escalate", "report")

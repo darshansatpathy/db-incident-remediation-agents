@@ -101,4 +101,7 @@ def create_demo_schema(cur: psycopg.Cursor[Any]) -> None:
     cur.execute(
         "INSERT INTO shop.inventory SELECT 'SKU-' || g, 100 FROM generate_series(1, 50) g ON CONFLICT DO NOTHING"
     )
-    cur.execute(sql.SQL("GRANT USAGE ON SCHEMA shop TO {}").format(sql.Identifier(OBSERVER)))
+    # VACUUM resolves the table by name, so the operator needs USAGE on every schema whose
+    # tables it may vacuum; pg_maintain (PostgreSQL 17+) grants the privilege, not the lookup.
+    for role in (OBSERVER, OPERATOR):
+        cur.execute(sql.SQL("GRANT USAGE ON SCHEMA shop TO {}").format(sql.Identifier(role)))

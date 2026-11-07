@@ -147,3 +147,22 @@ def test_observer_is_read_only(target: Target) -> None:
 
     with observer_connect(target.observer) as conn, pytest.raises(psycopg.errors.ReadOnlySqlTransaction):
         conn.execute("UPDATE shop.orders SET status = 'x' WHERE id = 1")
+
+
+def test_failed_actions_escalate_at_once(target: Target) -> None:
+    """If the operator can't act (here: it can't even connect), escalate with the error instead of verifying."""
+    settings = replace(target.settings(), operator_dsn="postgresql://dbr_operator@127.0.0.1:1/none")
+    lab = chaos.Lab(target.admin, target.app)
+    try:
+        chaos.INJECTORS["idle_transactions_4"](lab)
+        lab.wait_for(lambda: False, timeout=2.5)
+        wiring = build(settings)
+        (opened,) = wiring.engine.receive(AlertmanagerPayload.model_validate(payload_for("PostgresIdleInTransaction")))
+        incident = wiring.engine.run(opened["incident_id"])
+        assert incident["outcome"] == "escalated"
+        assert {a["status"] for a in wiring.store.actions(opened["incident_id"])} == {"failed"}
+        kinds = [e["kind"] for e in wiring.store.events(opened["incident_id"])]
+        assert "verify" not in kinds and "every action failed" in incident["report"]
+        wiring.close()
+    finally:
+        lab.cleanup()
