@@ -11,6 +11,9 @@
 fix it from a reviewed runbook, and prove the fix held. Anything a runbook doesn't allow, or
 the policy protects, goes to a person instead.**
 
+> Reference implementation built on synthetic or public data. It distils patterns from production
+> work into code you can run and read; it is not a client system.
+
 A lock chain at 3 a.m. is almost always the same story: one abandoned transaction, dozens of
 sessions queued behind it, and an on-call engineer who has to find it in `pg_stat_activity`
 before checkout times out. This repository automates the safe part of that work and refuses
